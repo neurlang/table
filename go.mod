@@ -1,4 +1,4 @@
-module localhost/table
+module github.com/neurlang/table
 
 go 1.16
 
