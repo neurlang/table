@@ -81,7 +81,7 @@ func TestRemoveByBasic(t *testing.T) {
 
 	// After removal, only 2 rows should remain non-nil
 	count := 0
-	for _, r := range b.getBy(make(map[int]string)) {
+	for _, r := range b.all(make(map[int]string)) {
 		if r != nil {
 			count++ // non-nil rows
 			if r[1] == "remove" {
@@ -91,6 +91,32 @@ func TestRemoveByBasic(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("expected 2 remaining rows, got %d", count)
+	}
+	// After removal, only 2 rows should remain non-nil
+	count = 0
+	for _, r := range b.getBy(make(map[int]string)) {
+		if r != nil {
+			count++ // non-nil rows
+			if r[1] == "remove" {
+				t.Errorf("found removed row %v", r)
+			}
+		}
+	}
+	if count != 0 {
+		t.Errorf("expected no remaining rows when querying empty map, got %d", count)
+	}
+	// After removal, only 2 rows should remain non-nil
+	count = 0
+	for _, r := range b.getBy(nil) {
+		if r != nil {
+			count++ // non-nil rows
+			if r[1] == "remove" {
+				t.Errorf("found removed row %v", r)
+			}
+		}
+	}
+	if count != 0 {
+		t.Errorf("expected no remaining rows when querying nil, got %d", count)
 	}
 }
 
