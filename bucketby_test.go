@@ -81,7 +81,7 @@ func TestremoveBy_Basic(t *testing.T) {
 
 	// After removal, only 2 rows should remain non-nil
 	count := 0
-	for _, r := range b.All() {
+	for _, r := range b.getBy(make(map[int]string)) {
 		if r != nil {
 			count++ // non-nil rows
 			if r[1] == "remove" {
@@ -104,7 +104,7 @@ func TestremoveBy_MultiClause(t *testing.T) {
 	b := newBucket(rows)
 
 	b.removeBy(map[int]string{0: "a", 2: "2"})
-	remaining := b.All()
+	remaining := b.getBy(make(map[int]string))
 	for _, r := range remaining {
 		if r != nil && r[0] == "a" && r[2] == "2" {
 			t.Errorf("row %v should have been removed", r)
@@ -127,7 +127,7 @@ func BenchmarkgetBy(b *testing.B) {
 
 	b.Run("FilterAfterGetAll", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			all := bucket.All()
+			all := bucket.getBy(make(map[int]string))
 			var filtered [][]string
 			for _, r := range all {
 				if r[1] == "C1-R5000" && r[3] == "C3-R5000" {
