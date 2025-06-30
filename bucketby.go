@@ -121,3 +121,78 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 	}
 	return result
 }
+
+// removeBy deletes all rows matching every (col→val) clause in q.
+// It bails early if any clause has zero matches, seeds from the most selective clause,
+// then filters in-memory before nulling out matching entries.
+func (b *bucket) removeBy(q map[int]string) {
+	if len(b.data) == 0 || len(q) == 0 {
+		return
+	}
+
+	// 1) Collect counts & early exit
+	type clause struct {
+		col   int
+		val   string
+		count int
+	}
+	clauses := make([]clause, 0, len(q))
+	for col, val := range q {
+		cnt := b.countExisting(col, val)
+		if cnt == 0 {
+			return
+		}
+		clauses = append(clauses, clause{col: col, val: val, count: cnt})
+	}
+
+	// 2) Sort clauses by ascending count (more selective first),
+	//    tie-breaking by longer val to favor rare longer strings.
+	sort.Slice(clauses, func(i, j int) bool {
+		if clauses[i].count != clauses[j].count {
+			return clauses[i].count < clauses[j].count
+		}
+		return len(clauses[i].val) > len(clauses[j].val)
+	})
+
+	n := len(b.data)
+	first := clauses[0]
+
+	// 3) Seed initial candidate indices from the smallest clause
+	positions := make([]int, 0, first.count)
+	for j := 1; j <= first.count; j++ {
+		key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
+		var pos int
+		for bit := 0; bit < b.loglen; bit++ {
+			if quaternary.Filter(b.filters[bit]).GetString(key) {
+				pos |= 1 << bit
+			}
+		}
+		idx := pos % n
+		if idx < n {
+			row := b.data[idx]
+			if first.col < len(row) && row[first.col] == first.val {
+				positions = append(positions, idx)
+			}
+		}
+	}
+
+	// 4) Filter by remaining clauses in-memory
+	for _, cl := range clauses[1:] {
+		out := positions[:0]
+		for _, idx := range positions {
+			row := b.data[idx]
+			if cl.col < len(row) && row[cl.col] == cl.val {
+				out = append(out, idx)
+			}
+		}
+		positions = out
+		if len(positions) == 0 {
+			return
+		}
+	}
+
+	// 5) Delete matching rows
+	for _, idx := range positions {
+		b.data[idx] = nil
+	}
+}
