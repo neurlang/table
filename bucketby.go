@@ -8,7 +8,7 @@ import (
 )
 
 func (b *bucket) getBy(q map[int]string) [][]string {
-	if len(b.data) == 0 || len(q) == 0 {
+	if q == nil || len(q) == 0 || len(b.data) == 0 {
 		return nil
 	}
 
@@ -126,7 +126,7 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 // It bails early if any clause has zero matches, seeds from the most selective clause,
 // then filters in-memory before nulling out matching entries.
 func (b *bucket) removeBy(q map[int]string) {
-	if len(b.data) == 0 || len(q) == 0 {
+	if q == nil || len(q) == 0 || len(b.data) == 0 {
 		return
 	}
 
