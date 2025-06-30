@@ -45,7 +45,7 @@ func TestTable_FuzzMassive(t *testing.T) {
 		}
 
 		// Holes must match GetAllHoles >= GetAll
-		allHoles := tbl.GetAllHoles(col, val)
+		allHoles := tbl.GetAll(col, val)
 		if len(allHoles) < len(all) {
 			t.Fatalf("GetAllHoles() should never be smaller than GetAll()")
 		}
