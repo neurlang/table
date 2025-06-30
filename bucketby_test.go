@@ -19,7 +19,7 @@ func sampleData(rows, cols int) [][]string {
 	return data
 }
 
-func TestgetBy_SingleClause(t *testing.T) {
+func TestGetBy_SingleClause(t *testing.T) {
 	rows := [][]string{
 		{"apple", "red"},
 		{"banana", "yellow"},
@@ -32,14 +32,14 @@ func TestgetBy_SingleClause(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(result))
 	}
-	for _, r := range result {
+	for , r := range result {
 		if r[0] != "apple" {
 			t.Errorf("unexpected row %v", r)
 		}
 	}
 }
 
-func TestgetBy_MultiClause(t *testing.T) {
+func TestGetByMultiClause(t *testing.T) {
 	rows := [][]string{
 		{"user1", "admin", "active"},
 		{"user2", "member", "inactive"},
@@ -58,7 +58,7 @@ func TestgetBy_MultiClause(t *testing.T) {
 	}
 }
 
-func TestgetBy_NoMatch(t *testing.T) {
+func TestGetByNoMatch(t *testing.T) {
 	rows := [][]string{{"a", "b"}, {"c", "d"}}
 	b := newBucket(rows)
 
@@ -68,7 +68,7 @@ func TestgetBy_NoMatch(t *testing.T) {
 	}
 }
 
-func TestremoveBy_Basic(t *testing.T) {
+func TestRemoveByBasic(t *testing.T) {
 	rows := [][]string{
 		{"1", "keep"},
 		{"2", "remove"},
@@ -81,7 +81,7 @@ func TestremoveBy_Basic(t *testing.T) {
 
 	// After removal, only 2 rows should remain non-nil
 	count := 0
-	for _, r := range b.getBy(make(map[int]string)) {
+	for , r := range b.getBy(make(map[int]string)) {
 		if r != nil {
 			count++ // non-nil rows
 			if r[1] == "remove" {
@@ -94,7 +94,7 @@ func TestremoveBy_Basic(t *testing.T) {
 	}
 }
 
-func TestremoveBy_MultiClause(t *testing.T) {
+func TestRemoveBy_MultiClause(t *testing.T) {
 	rows := [][]string{
 		{"a", "x", "1"},
 		{"a", "y", "2"},
@@ -113,7 +113,7 @@ func TestremoveBy_MultiClause(t *testing.T) {
 }
 
 // BenchmarkgetBy compares getBy against a manual filter + GetAll for varying sizes
-func BenchmarkgetBy(b *testing.B) {
+func BenchmarkGetBy(b *testing.B) {
 	const rows = 10000
 	const cols = 5
 	data := sampleData(rows, cols)
@@ -140,7 +140,7 @@ func BenchmarkgetBy(b *testing.B) {
 }
 
 // BenchmarkremoveBy measures the cost of a multi-clause removeBy
-func BenchmarkremoveBy(b *testing.B) {
+func BenchmarkRemoveBy(b *testing.B) {
 	const rows = 5000
 	const cols = 4
 	data := sampleData(rows, cols)
