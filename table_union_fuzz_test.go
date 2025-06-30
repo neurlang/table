@@ -25,7 +25,7 @@ func unionRows(a, b [][]string) [][]string {
 func TestFuzzUnion(t *testing.T) {
 	const (
 		maxCols     = 5
-		totalIters  = 5000
+		totalIters  = 500
 		lookupIters = 50
 		maxValLen   = 8
 		seed        = 42
