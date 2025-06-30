@@ -7,7 +7,10 @@ import (
 	"github.com/neurlang/quaternary"
 )
 
+// getBy returns all rows matching every (col→val) clause in q.
+// Returns nil if q is nil/empty, no data, or no matches.
 func (b *bucket) getBy(q map[int]string) [][]string {
+	// Favor nil for empty filters or empty data
 	if q == nil || len(q) == 0 || len(b.data) == 0 {
 		return nil
 	}
@@ -17,7 +20,8 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 		val   string
 		count int
 	}
-	// 1) Collect counts & bail early
+
+	// 1) Collect counts & bail early if any clause has zero matches
 	clauses := make([]clause, 0, len(q))
 	for col, val := range q {
 		cnt := b.countExisting(col, val)
@@ -27,7 +31,7 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 		clauses = append(clauses, clause{col: col, val: val, count: cnt})
 	}
 
-	// 2) Sort by ascending count (then by descending val length)
+	// 2) Sort by ascending count, tie-breaker by descending val length
 	sort.Slice(clauses, func(i, j int) bool {
 		if clauses[i].count != clauses[j].count {
 			return clauses[i].count < clauses[j].count
@@ -39,14 +43,13 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 	first := clauses[0]
 	var positions []int
 
-	// 3) Negation optimization: if >50% of rows match, build the complement
+	// 3) Seed candidate indices from the most selective clause
 	useNeg := first.count*2 > n
-
 	if useNeg {
-		// build exclusion set E
+		// exclusion set
 		exclude := make(map[int]struct{}, first.count)
 		for j := 1; j <= first.count; j++ {
-			key := fmt.Sprint(j) + ":" + fmt.Sprint(first.col) + ":" + first.val
+			key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
 			var pos int
 			for bit := 0; bit < b.loglen; bit++ {
 				if quaternary.Filter(b.filters[bit]).GetString(key) {
@@ -54,12 +57,10 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 				}
 			}
 			idx := pos % n
-			row := b.data[idx]
-			if first.col < len(row) && row[first.col] == first.val {
+			if row := b.data[idx]; first.col < len(row) && row[first.col] == first.val {
 				exclude[idx] = struct{}{}
 			}
 		}
-		// positions = all rows not in exclude
 		positions = make([]int, 0, n-len(exclude))
 		for i := range b.data {
 			if _, found := exclude[i]; !found {
@@ -67,10 +68,9 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 			}
 		}
 	} else {
-		// the usual seed: only those that match
 		positions = make([]int, 0, first.count)
 		for j := 1; j <= first.count; j++ {
-			key := fmt.Sprint(j) + ":" + fmt.Sprint(first.col) + ":" + first.val
+			key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
 			var pos int
 			for bit := 0; bit < b.loglen; bit++ {
 				if quaternary.Filter(b.filters[bit]).GetString(key) {
@@ -78,20 +78,22 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 				}
 			}
 			idx := pos % n
-			row := b.data[idx]
-			if first.col < len(row) && row[first.col] == first.val {
+			if row := b.data[idx]; first.col < len(row) && row[first.col] == first.val {
 				positions = append(positions, idx)
 			}
 		}
 	}
 
-	// 4) For negation, the remaining clauses become exclusion tests.
-	//    For normal, they remain inclusion tests.
+	// Early exit if seed yields no candidates
+	if len(positions) == 0 {
+		return nil
+	}
+
+	// 4) Filter by remaining clauses
 	for _, cl := range clauses[1:] {
-		var out []int
+		out := positions[:0]
 		if useNeg {
-			// remove any that *should* be excluded by cl
-			// i.e. if row[col]==val, skip it
+			// exclude rows matching cl
 			for _, idx := range positions {
 				row := b.data[idx]
 				if cl.col < len(row) && row[cl.col] == cl.val {
@@ -100,7 +102,7 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 				out = append(out, idx)
 			}
 		} else {
-			// keep only those that match cl
+			// include only rows matching cl
 			for _, idx := range positions {
 				row := b.data[idx]
 				if cl.col < len(row) && row[cl.col] == cl.val {
@@ -114,28 +116,30 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 		}
 	}
 
-	// 5) Collect
-	result := make([][]string, 0, len(positions))
-	for _, idx := range positions {
-		result = append(result, b.data[idx])
+	// 5) Collect final rows; if none, return nil
+	result := make([][]string, len(positions))
+	for i, idx := range positions {
+		result[i] = b.data[idx]
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
 
 // removeBy deletes all rows matching every (col→val) clause in q.
-// It bails early if any clause has zero matches, seeds from the most selective clause,
-// then filters in-memory before nulling out matching entries.
+// Returns immediately if q is nil/empty or no data.
 func (b *bucket) removeBy(q map[int]string) {
 	if q == nil || len(q) == 0 || len(b.data) == 0 {
 		return
 	}
-
-	// 1) Collect counts & early exit
 	type clause struct {
 		col   int
 		val   string
 		count int
 	}
+
+	// 1) Collect counts & bail early
 	clauses := make([]clause, 0, len(q))
 	for col, val := range q {
 		cnt := b.countExisting(col, val)
@@ -145,8 +149,7 @@ func (b *bucket) removeBy(q map[int]string) {
 		clauses = append(clauses, clause{col: col, val: val, count: cnt})
 	}
 
-	// 2) Sort clauses by ascending count (more selective first),
-	//    tie-breaking by longer val to favor rare longer strings.
+	// 2) Sort by ascending count, tie-breaker by descending val length
 	sort.Slice(clauses, func(i, j int) bool {
 		if clauses[i].count != clauses[j].count {
 			return clauses[i].count < clauses[j].count
@@ -157,7 +160,7 @@ func (b *bucket) removeBy(q map[int]string) {
 	n := len(b.data)
 	first := clauses[0]
 
-	// 3) Seed initial candidate indices from the smallest clause
+	// 3) Seed candidates from the most selective clause
 	positions := make([]int, 0, first.count)
 	for j := 1; j <= first.count; j++ {
 		key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
@@ -168,15 +171,15 @@ func (b *bucket) removeBy(q map[int]string) {
 			}
 		}
 		idx := pos % n
-		if idx < n {
-			row := b.data[idx]
-			if first.col < len(row) && row[first.col] == first.val {
-				positions = append(positions, idx)
-			}
+		if row := b.data[idx]; first.col < len(row) && row[first.col] == first.val {
+			positions = append(positions, idx)
 		}
 	}
+	if len(positions) == 0 {
+		return
+	}
 
-	// 4) Filter by remaining clauses in-memory
+	// 4) Filter remaining clauses
 	for _, cl := range clauses[1:] {
 		out := positions[:0]
 		for _, idx := range positions {
@@ -191,7 +194,7 @@ func (b *bucket) removeBy(q map[int]string) {
 		}
 	}
 
-	// 5) Delete matching rows
+	// 5) Nullify matching rows
 	for _, idx := range positions {
 		b.data[idx] = nil
 	}
