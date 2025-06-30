@@ -88,7 +88,7 @@ func (b *bucket) removeBy(q map[int]string) {
 		return
 	}
 
-	// 1) Build & sort clauses
+	// 1) Gather clauses & bail early
 	type clause struct {
 		col int
 		val string
@@ -102,6 +102,8 @@ func (b *bucket) removeBy(q map[int]string) {
 		}
 		cls = append(cls, clause{col: c, val: v, cnt: cnt})
 	}
+
+	// 2) Sort by selectivity
 	sort.Slice(cls, func(i, j int) bool {
 		if cls[i].cnt != cls[j].cnt {
 			return cls[i].cnt < cls[j].cnt
@@ -109,15 +111,50 @@ func (b *bucket) removeBy(q map[int]string) {
 		return len(cls[i].val) > len(cls[j].val)
 	})
 
-	// 2) Get matching positions via getBy (holes included)
-	hits := b.getBy(q)
-	if hits == nil {
+	// 3) Seed & intersect exactly as getBy does, but keep indices
+	n := len(b.data)
+	first := cls[0]
+	positions := make([]int, 0, first.cnt)
+	// seed from first clause
+	for j := 1; j <= first.cnt; j++ {
+		key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
+		var bits int
+		for bit := 0; bit < b.loglen; bit++ {
+			if quaternary.Filter(b.filters[bit]).GetString(key) {
+				bits |= 1 << bit
+			}
+		}
+		positions = append(positions, bits%n)
+	}
+	if len(positions) == 0 {
 		return
 	}
+	// intersect remaining clauses
+	for _, cl := range cls[1:] {
+		out := positions[:0]
+		for _, idx := range positions {
+			// use the same filter logic—no row content checks
+			key := fmt.Sprintf("0:%d:%s", cl.col, cl.val)
+			var keep bool
+			for bit := 0; bit < b.loglen; bit++ {
+				if quaternary.Filter(b.filters[bit]).GetString(key) {
+					keep = true
+					break
+				}
+			}
+			if keep {
+				out = append(out, idx)
+			}
+		}
+		positions = out
+		if len(positions) == 0 {
+			return
+		}
+	}
 
-	// 3) Nullify those slots
-	for _, row := range hits {
-		// locate its index via mod of the hash bits or keep track separately
-		// (in practice you'd capture indices in getBy to avoid searching)
+	// 4) Nullify exactly those slots
+	for _, idx := range positions {
+		b.data[idx] = nil
 	}
 }
+
