@@ -19,7 +19,7 @@ func sampleData(rows, cols int) [][]string {
 	return data
 }
 
-func TestGetBy_SingleClause(t *testing.T) {
+func TestgetBy_SingleClause(t *testing.T) {
 	rows := [][]string{
 		{"apple", "red"},
 		{"banana", "yellow"},
@@ -28,7 +28,7 @@ func TestGetBy_SingleClause(t *testing.T) {
 	}
 	b := newBucket(rows)
 
-	result := b.GetBy(map[int]string{0: "apple"})
+	result := b.getBy(map[int]string{0: "apple"})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(result))
 	}
@@ -39,7 +39,7 @@ func TestGetBy_SingleClause(t *testing.T) {
 	}
 }
 
-func TestGetBy_MultiClause(t *testing.T) {
+func TestgetBy_MultiClause(t *testing.T) {
 	rows := [][]string{
 		{"user1", "admin", "active"},
 		{"user2", "member", "inactive"},
@@ -48,7 +48,7 @@ func TestGetBy_MultiClause(t *testing.T) {
 	}
 	b := newBucket(rows)
 
-	result := b.GetBy(map[int]string{1: "admin", 2: "inactive"})
+	result := b.getBy(map[int]string{1: "admin", 2: "inactive"})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(result))
 	}
@@ -58,17 +58,17 @@ func TestGetBy_MultiClause(t *testing.T) {
 	}
 }
 
-func TestGetBy_NoMatch(t *testing.T) {
+func TestgetBy_NoMatch(t *testing.T) {
 	rows := [][]string{{"a", "b"}, {"c", "d"}}
 	b := newBucket(rows)
 
-	result := b.GetBy(map[int]string{0: "x"})
+	result := b.getBy(map[int]string{0: "x"})
 	if result != nil {
 		t.Errorf("expected nil, got %v", result)
 	}
 }
 
-func TestRemoveBy_Basic(t *testing.T) {
+func TestremoveBy_Basic(t *testing.T) {
 	rows := [][]string{
 		{"1", "keep"},
 		{"2", "remove"},
@@ -77,7 +77,7 @@ func TestRemoveBy_Basic(t *testing.T) {
 	}
 	b := newBucket(rows)
 
-	b.RemoveBy(map[int]string{1: "remove"})
+	b.removeBy(map[int]string{1: "remove"})
 
 	// After removal, only 2 rows should remain non-nil
 	count := 0
@@ -94,7 +94,7 @@ func TestRemoveBy_Basic(t *testing.T) {
 	}
 }
 
-func TestRemoveBy_MultiClause(t *testing.T) {
+func TestremoveBy_MultiClause(t *testing.T) {
 	rows := [][]string{
 		{"a", "x", "1"},
 		{"a", "y", "2"},
@@ -103,7 +103,7 @@ func TestRemoveBy_MultiClause(t *testing.T) {
 	}
 	b := newBucket(rows)
 
-	b.RemoveBy(map[int]string{0: "a", 2: "2"})
+	b.removeBy(map[int]string{0: "a", 2: "2"})
 	remaining := b.All()
 	for _, r := range remaining {
 		if r != nil && r[0] == "a" && r[2] == "2" {
@@ -112,16 +112,16 @@ func TestRemoveBy_MultiClause(t *testing.T) {
 	}
 }
 
-// BenchmarkGetBy compares GetBy against a manual filter + GetAll for varying sizes
-func BenchmarkGetBy(b *testing.B) {
+// BenchmarkgetBy compares getBy against a manual filter + GetAll for varying sizes
+func BenchmarkgetBy(b *testing.B) {
 	const rows = 10000
 	const cols = 5
 	data := sampleData(rows, cols)
 	bucket := newBucket(data)
 
-	b.Run("GetBy", func(b *testing.B) {
+	b.Run("getBy", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = bucket.GetBy(map[int]string{1: "C1-R5000", 3: "C3-R5000"})
+			_ = bucket.getBy(map[int]string{1: "C1-R5000", 3: "C3-R5000"})
 		}
 	})
 
@@ -139,8 +139,8 @@ func BenchmarkGetBy(b *testing.B) {
 	})
 }
 
-// BenchmarkRemoveBy measures the cost of a multi-clause RemoveBy
-func BenchmarkRemoveBy(b *testing.B) {
+// BenchmarkremoveBy measures the cost of a multi-clause removeBy
+func BenchmarkremoveBy(b *testing.B) {
 	const rows = 5000
 	const cols = 4
 	data := sampleData(rows, cols)
@@ -150,6 +150,6 @@ func BenchmarkRemoveBy(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// re-seed for each iteration
 		bucket = newBucket(data)
-		bucket.RemoveBy(map[int]string{2: "C2-R2500", 0: "C0-R2500"})
+		bucket.removeBy(map[int]string{2: "C2-R2500", 0: "C0-R2500"})
 	}
 }
