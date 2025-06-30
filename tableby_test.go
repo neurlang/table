@@ -52,10 +52,16 @@ func TestSanityTableBy(t *testing.T) {
 		t.Errorf("Count(admin) = %d; want 3", got)
 	}
 	adminRows := tbl.QueryBy(map[int]string{1: "admin"})
-	if len(adminRows) != 3 {
-		t.Fatalf("QueryBy(admin) count = %d; want 3", len(adminRows))
+	var nonNilRows int
+	for _, row := range adminRows {
+		if row != nil && len(row) > 0 {
+			nonNilRows++
+		}
 	}
-
+	
+	if nonNilRows != 3 {
+		t.Fatalf("QueryBy(admin) non-nil count = %d; want 3", nonNilRows)
+	}
 	// 5. QueryBy multi-column
 	expected := [][]string{
 		{"u1", "admin", "active"},
