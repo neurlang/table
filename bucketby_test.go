@@ -81,7 +81,7 @@ func TestRemoveByBasic(t *testing.T) {
 
 	// After removal, only 2 rows should remain non-nil
 	count := 0
-	for , r := range b.getBy(make(map[int]string)) {
+	for _, r := range b.getBy(make(map[int]string)) {
 		if r != nil {
 			count++ // non-nil rows
 			if r[1] == "remove" {
