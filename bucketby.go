@@ -8,17 +8,15 @@ import (
 )
 
 // getBy returns all raw matches for every (col→val), including nil holes.
-// It never inspects row contents—decoding purely by the quaternary filter.
+// It checks row contents, but is free to return holes (nil rows)
 func (b *bucket) getBy(q map[int]string) [][]string {
 	if q == nil || len(q) == 0 || len(b.data) == 0 {
 		return nil
 	}
 
-	// 1) Collect clauses and bail if any have zero hits
 	type clause struct {
-		col int
-		val string
-		cnt int
+		col, cnt int
+		val      string
 	}
 	cls := make([]clause, 0, len(q))
 	for c, v := range q {
@@ -28,8 +26,6 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 		}
 		cls = append(cls, clause{col: c, val: v, cnt: cnt})
 	}
-
-	// 2) Sort by ascending selectivity
 	sort.Slice(cls, func(i, j int) bool {
 		if cls[i].cnt != cls[j].cnt {
 			return cls[i].cnt < cls[j].cnt
@@ -38,12 +34,12 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 	})
 
 	n := len(b.data)
-	// 3) Seed positions from the most selective clause, unconditionally
 	first := cls[0]
 	posList := make([]int, 0, first.cnt)
+	// seed positions via index
 	for j := 1; j <= first.cnt; j++ {
 		key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
-		var bits int
+		bits := 0
 		for bit := 0; bit < b.loglen; bit++ {
 			if quaternary.Filter(b.filters[bit]).GetString(key) {
 				bits |= 1 << bit
@@ -55,31 +51,35 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 		return nil
 	}
 
-	// 4) Intersect further clauses by re‐testing the filter bits only
-	for _, cl := range cls[1:] {
-		out := posList[:0]
-		// build the filter key once
-		keyBase := fmt.Sprintf("0:%d:%s", cl.col, cl.val)
-		for _, idx := range posList {
-			// if the filter says this row had that value at that column,
-			// we keep it—even if b.data[idx] is now nil
-			if quaternary.Filter(b.filters[0]).GetString(keyBase) {
-				out = append(out, idx)
+	// now post-filter each candidate:
+	// - keep any nil (hole)
+	// - for non-nil, ensure every clause is satisfied in-row
+	var result [][]string
+	for _, idx := range posList {
+		row := b.data[idx]
+		if row == nil {
+			// hole: emit as-is
+			result = append(result, nil)
+			continue
+		}
+		// verify all clauses
+		ok := true
+		for _, cl := range cls {
+			if cl.col >= len(row) || row[cl.col] != cl.val {
+				ok = false
+				break
 			}
 		}
-		posList = out
-		if len(posList) == 0 {
-			return nil
+		if ok {
+			result = append(result, row)
 		}
 	}
-
-	// 5) Return the raw slices (some may be nil)
-	res := make([][]string, len(posList))
-	for i, idx := range posList {
-		res[i] = b.data[idx]
+	if len(result) == 0 {
+		return nil
 	}
-	return res
+	return result
 }
+
 
 // removeBy deletes all rows matching every (col→val).
 // Holes are simply overwritten with nil.
