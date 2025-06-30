@@ -80,7 +80,6 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 	return result
 }
 
-
 // removeBy deletes all rows matching every (col→val).
 // Holes are simply overwritten with nil.
 func (b *bucket) removeBy(q map[int]string) {
@@ -157,4 +156,3 @@ func (b *bucket) removeBy(q map[int]string) {
 		b.data[idx] = nil
 	}
 }
-

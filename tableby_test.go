@@ -58,7 +58,7 @@ func TestSanityTableBy(t *testing.T) {
 			nonNilRows++
 		}
 	}
-	
+
 	if nonNilRows != 3 {
 		t.Fatalf("QueryBy(admin) non-nil count = %d; want 3", nonNilRows)
 	}

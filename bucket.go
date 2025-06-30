@@ -4,9 +4,9 @@ import "github.com/neurlang/quaternary"
 import "fmt"
 
 type bucket struct {
-	data [][]string
+	data    [][]string
 	filters [][]byte
-	loglen int
+	loglen  int
 }
 
 func newBucket(rows [][]string) (ret *bucket) {
@@ -15,9 +15,9 @@ func newBucket(rows [][]string) (ret *bucket) {
 		loglen++
 	}
 	ret = &bucket{
-		data: rows,
+		data:    rows,
 		filters: [][]byte{},
-		loglen: loglen,
+		loglen:  loglen,
 	}
 
 	for b := 0; b < loglen; b++ {
@@ -40,7 +40,7 @@ func newBucket(rows [][]string) (ret *bucket) {
 		}
 		for k, v := range counter {
 			strkey := "0:" + k
-			boolval := ((v-1) >> b) & 1
+			boolval := ((v - 1) >> b) & 1
 			collection[strkey] = boolval == 1
 			//println(strkey, "=>", boolval)
 		}
@@ -52,7 +52,7 @@ func newBucket(rows [][]string) (ret *bucket) {
 func (b *bucket) countExisting(col int, val string) (out int) {
 	key := "0:" + fmt.Sprint(col) + ":" + val
 	for i := 0; i < b.loglen; i++ {
-		if (quaternary.Filter(b.filters[i]).GetString(key)) {
+		if quaternary.Filter(b.filters[i]).GetString(key) {
 			out |= 1 << i
 		}
 	}
@@ -67,18 +67,18 @@ func (b *bucket) count(col int, val string) (out int) {
 	key2 := "1:" + fmt.Sprint(col) + ":" + val
 	var pos int
 	for i := 0; i < b.loglen; i++ {
-		if (quaternary.Filter(b.filters[i]).GetString(key2)) {
+		if quaternary.Filter(b.filters[i]).GetString(key2) {
 			pos |= 1 << i
 		}
 	}
-	if col >= len(b.data[pos % len(b.data)]) {
+	if col >= len(b.data[pos%len(b.data)]) {
 		return 0
 	}
-	if b.data[pos % len(b.data)][col] != val {
+	if b.data[pos%len(b.data)][col] != val {
 		return 0
 	}
 	for i := 0; i < b.loglen; i++ {
-		if (quaternary.Filter(b.filters[i]).GetString(key1)) {
+		if quaternary.Filter(b.filters[i]).GetString(key1) {
 			out |= 1 << i
 		}
 	}
@@ -102,12 +102,12 @@ func (b *bucket) getAll(col int, val string) (data [][]string) {
 		key := fmt.Sprint(j) + ":" + fmt.Sprint(col) + ":" + val
 		var pos int
 		for i := 0; i < b.loglen; i++ {
-			if (quaternary.Filter(b.filters[i]).GetString(key)) {
+			if quaternary.Filter(b.filters[i]).GetString(key) {
 				pos |= 1 << i
 			}
 		}
 		//println(key, pos)
-		fetched := b.data[pos % len(b.data)]
+		fetched := b.data[pos%len(b.data)]
 		if col < len(fetched) && fetched[col] == val {
 			data = append(data, fetched)
 		}
@@ -126,14 +126,14 @@ func (b *bucket) remove(col int, val string) {
 		key := fmt.Sprint(j) + ":" + fmt.Sprint(col) + ":" + val
 		var pos int
 		for i := 0; i < b.loglen; i++ {
-			if (quaternary.Filter(b.filters[i]).GetString(key)) {
+			if quaternary.Filter(b.filters[i]).GetString(key) {
 				pos |= 1 << i
 			}
 		}
 		//println(key, pos)
-		fetched := b.data[pos % len(b.data)]
+		fetched := b.data[pos%len(b.data)]
 		if col < len(fetched) && fetched[col] == val {
-			b.data[pos % len(b.data)] = nil
+			b.data[pos%len(b.data)] = nil
 		}
 	}
 	return
@@ -150,12 +150,12 @@ func (b *bucket) get(col int, val string) (data []string) {
 		key := fmt.Sprint(j) + ":" + fmt.Sprint(col) + ":" + val
 		var pos int
 		for i := 0; i < b.loglen; i++ {
-			if (quaternary.Filter(b.filters[i]).GetString(key)) {
+			if quaternary.Filter(b.filters[i]).GetString(key) {
 				pos |= 1 << i
 			}
 		}
 		//println(key, pos)
-		fetched := b.data[pos % len(b.data)]
+		fetched := b.data[pos%len(b.data)]
 		if col < len(fetched) && fetched[col] == val {
 			data = fetched
 			break

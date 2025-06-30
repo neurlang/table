@@ -30,6 +30,7 @@ func (b *Table) GetAllHoles(col int, val string) (data [][]string) {
 	}
 	return
 }
+
 // Remove deletes all the rows which have string val in column col
 func (b *Table) Remove(col int, val string) {
 	for _, buck := range b.b {
@@ -54,6 +55,7 @@ func (b *Table) InsertHoles(data [][]string) {
 		b.b = append(b.b, *newBucket(data))
 	}
 }
+
 // Insert inserts rows to the table ignoring holes
 func (b *Table) Insert(data [][]string) {
 	var in [][]string
@@ -83,6 +85,7 @@ func (b *Table) AllHoles() (data [][]string) {
 	}
 	return
 }
+
 // All returns all data from the table skipping the deletion holes
 func (b *Table) All() (out [][]string) {
 	for _, row := range b.AllHoles() {
