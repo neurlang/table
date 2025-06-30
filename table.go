@@ -15,7 +15,13 @@ func (b *Table) Count(col int, val string) (out int) {
 }
 
 // GetAll loads all the rows which have string val in column col
+// Note: This does have a bug where holes are returned as well, this will be fixed in future relase
 func (b *Table) GetAll(col int, val string) (data [][]string) {
+	return b.GetAllHoles(col, val)
+}
+
+// GetAllHoles loads all the rows which have string val in column col
+func (b *Table) GetAllHoles(col int, val string) (data [][]string) {
 	for _, buck := range b.b {
 		fetched := buck.getAll(col, val)
 		if len(fetched) > 0 {
