@@ -71,6 +71,9 @@ func (b *bucket) count(col int, val string) (out int) {
 			pos |= 1 << i
 		}
 	}
+	if col >= len(b.data[pos % len(b.data)]) {
+		return 0
+	}
 	if b.data[pos % len(b.data)][col] != val {
 		return 0
 	}
