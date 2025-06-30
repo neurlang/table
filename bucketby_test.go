@@ -32,7 +32,7 @@ func TestGetBy_SingleClause(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(result))
 	}
-	for , r := range result {
+	for _, r := range result {
 		if r[0] != "apple" {
 			t.Errorf("unexpected row %v", r)
 		}
