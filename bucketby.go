@@ -1,10 +1,7 @@
 package table
 
 import (
-	"fmt"
 	"sort"
-
-	"github.com/neurlang/quaternary"
 )
 
 // getBy returns all raw matches for every (col→val), including nil holes.
@@ -38,13 +35,8 @@ func (b *bucket) getBy(q map[int]string) [][]string {
 	posList := make([]int, 0, first.cnt)
 	// seed positions via index
 	for j := 1; j <= first.cnt; j++ {
-		key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
 		bits := 0
-		for bit := 0; bit < b.loglen; bit++ {
-			if quaternary.Filter(b.filters[bit]).GetString(key) {
-				bits |= 1 << bit
-			}
-		}
+		bits = int(b.filter(j, first.col, first.val))
 		posList = append(posList, bits%n)
 	}
 	if len(posList) == 0 {
@@ -116,13 +108,8 @@ func (b *bucket) removeBy(q map[int]string) {
 	positions := make([]int, 0, first.cnt)
 	// seed from first clause
 	for j := 1; j <= first.cnt; j++ {
-		key := fmt.Sprintf("%d:%d:%s", j, first.col, first.val)
 		var bits int
-		for bit := 0; bit < b.loglen; bit++ {
-			if quaternary.Filter(b.filters[bit]).GetString(key) {
-				bits |= 1 << bit
-			}
-		}
+		bits = int(b.filter(j, first.col, first.val))
 		positions = append(positions, bits%n)
 	}
 	if len(positions) == 0 {
@@ -133,15 +120,9 @@ func (b *bucket) removeBy(q map[int]string) {
 		out := positions[:0]
 		for _, idx := range positions {
 			// use the same filter logic—no row content checks
-			key := fmt.Sprintf("0:%d:%s", cl.col, cl.val)
-			var keep bool
-			for bit := 0; bit < b.loglen; bit++ {
-				if quaternary.Filter(b.filters[bit]).GetString(key) {
-					keep = true
-					break
-				}
-			}
-			if keep {
+			var keep int
+			keep = int(b.filter(0, cl.col, cl.val))
+			if keep != 0 {
 				out = append(out, idx)
 			}
 		}
