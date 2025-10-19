@@ -1,36 +1,47 @@
 package table
 
-import "github.com/neurlang/quaternary"
-import "sync"
-import "math/bits"
-import "runtime"
+import quaternary "github.com/neurlang/quaternary/v1"
+//import "sync"
+//import "math/bits"
+//import "runtime"
 
 type bucket struct {
 	data  [][]string
-	index map[[2]int][][]byte
+	index [][][]byte
 	//blooms  [][]byte
 	loglen int
 }
 
 func (b *bucket) filter(j, c int, val string) uint64 {
-	if b.index[[2]int{j, c}] == nil {
+	if b.loglen == 0 {
 		return 0
 	}
-	var f = quaternary.Filters(b.index[[2]int{j, c}])
-	return f.GetStringMulti(val)
+	if j >= len(b.index) {
+		return 0
+	}
+	if c >= len(b.index[j]) {
+		return 0
+	}
+	if b.index[j][c] == nil {
+		return 0
+	}
+	ret := quaternary.GetNum(b.index[j][c], uint64(b.loglen), val)
+	//println(&b.index[[2]int{j, c}][0], j, c, val, "->", ret, "(", b.loglen, ")")
+	return ret
 }
 
 func (ret *bucket) presentBucket(col int, val string) bool {
 	return true
 
 }
-func newBucket(rows [][]string) *bucket {
+/*
+func newBucketfast(rows [][]string) *bucket {
 	// Initialize bucket and handle empty input
 	ret := &bucket{
 		data:  rows,
-		index: make(map[[2]int][][]byte),
+		index: make(map[[2]int][]byte),
 	}
-	if len(rows) == 0 {
+	if len(rows) <= 1 {
 		ret.loglen = 0
 		return ret
 	}
@@ -139,8 +150,8 @@ func newBucket(rows [][]string) *bucket {
 	}
 	tasks := make(chan task, len(global))
 	results := make(chan struct {
-		ik  [2]int
-		fss [][]byte
+		ik [2]int
+		fs []byte
 	}, nWorkers)
 
 	go func() {
@@ -155,15 +166,13 @@ func newBucket(rows [][]string) *bucket {
 		go func() {
 			defer wg.Done()
 			for t := range tasks {
-				var fs [][]byte
-				for _, f := range quaternary.MakeStringMulti(byte(loglen), t.val) {
-					if len(f) > 0 {
-						fs = append(fs, f)
-					}
-				}
+				var fs = quaternary.Make(t.val, byte(loglen))
+				//for k, v := range t.val {
+					//println(&fs[0], t.ikey[0], t.ikey[1], k, v, "(", loglen, ")")
+				//}
 				results <- struct {
-					ik  [2]int
-					fss [][]byte
+					ik [2]int
+					fs []byte
 				}{t.ikey, fs}
 			}
 		}()
@@ -175,35 +184,40 @@ func newBucket(rows [][]string) *bucket {
 	}()
 
 	for r := range results {
-		ret.index[r.ik] = append(ret.index[r.ik], r.fss...)
+		ret.index[r.ik] = r.fs
 	}
 
 	return ret
 }
-
-func newBucketslow(rows [][]string) (ret *bucket) {
-	var loglen = 0
-	for i := 0; 1<<i < len(rows); i++ {
-		loglen++
-	}
+*/
+func newBucket(rows [][]string) (ret *bucket) {
 	ret = &bucket{
 		data:   rows,
-		index:  make(map[[2]int][][]byte),
-		loglen: loglen,
+		loglen: 0,
 	}
+	if len(rows) <= 1 {
+		return
+	}
+	for i := 0; 1<<i < len(rows); i++ {
+		ret.loglen++
+	}
+	ret.index = make([][][]byte, ret.loglen+1, ret.loglen+1)
 	var counter = make(map[struct {
 		b int
 		n int
 		s string
 	}]int)
 	var collection = make(map[[2]int]map[string]uint64)
+	var maxlen int
 	for y := range rows {
+		if len(rows[y]) > maxlen {
+			maxlen = len(rows[y])
+		}
 		for x := range rows[y] {
-
 			// do other stuff
 			var bval uint64
 			key := rows[y][x]
-			for b := 0; b < loglen; b++ {
+			for b := 0; b < ret.loglen; b++ {
 				cnt := counter[struct {
 					b int
 					n int
@@ -225,6 +239,9 @@ func newBucketslow(rows [][]string) (ret *bucket) {
 			}
 		}
 	}
+	for i := range ret.index {
+		ret.index[i] = make([][]byte, maxlen, maxlen)
+	}
 	for k, w := range counter {
 		intkey := [2]int{0, k.n}
 		strkey := k.s
@@ -236,14 +253,15 @@ func newBucketslow(rows [][]string) (ret *bucket) {
 		//println(strkey, "=>", boolval)
 	}
 	for key, val := range collection {
-		for _, f := range quaternary.MakeStringMulti(byte(loglen), val) {
-			if len(f) > 0 {
-				ret.index[key] = append(ret.index[key], f)
-			}
-		}
+		ret.index[key[0]][key[1]] = quaternary.Make(val, byte(ret.loglen))
+		//for k, v := range val {
+			//println(&ret.index[key][0], key[0], key[1], k, v, "(", ret.loglen, ")")
+		//}
 	}
 	return
 }
+
+
 
 func (b *bucket) countExisting(col int, val string) (out int) {
 	if !b.presentBucket(col, val) {
