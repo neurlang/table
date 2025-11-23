@@ -1,6 +1,7 @@
 package table
 
 import quaternary "github.com/neurlang/quaternary/v1"
+
 //import "sync"
 //import "math/bits"
 //import "runtime"
@@ -34,161 +35,162 @@ func (ret *bucket) presentBucket(col int, val string) bool {
 	return true
 
 }
+
 /*
-func newBucketfast(rows [][]string) *bucket {
-	// Initialize bucket and handle empty input
-	ret := &bucket{
-		data:  rows,
-		index: make(map[[2]int][]byte),
-	}
-	if len(rows) <= 1 {
-		ret.loglen = 0
+	func newBucketfast(rows [][]string) *bucket {
+		// Initialize bucket and handle empty input
+		ret := &bucket{
+			data:  rows,
+			index: make(map[[2]int][]byte),
+		}
+		if len(rows) <= 1 {
+			ret.loglen = 0
+			return ret
+		}
+
+		// Compute number of bits
+		loglen := bits.Len(uint(len(rows) - 1))
+		ret.loglen = loglen
+
+		// Precompute masks
+		bitMasks := make([]uint64, loglen)
+		for b := 0; b < loglen; b++ {
+			bitMasks[b] = 1 << b
+		}
+
+		// Sequential counter pass + collect all partials
+		type countKey struct {
+			b, x int
+			s    string
+		}
+		counter := make(map[countKey]int, len(rows)*len(rows[0])*loglen)
+		type partial struct {
+			ikey [2]int
+			key  string
+			bits uint64
+		}
+		parts := make([]partial, 0, len(rows)*len(rows[0])*loglen)
+
+		for y, row := range rows {
+			rowMask := uint64(y)
+			for x, key := range row {
+				for b := 0; b < loglen; b++ {
+					ck := countKey{b, x, key}
+					cnt := counter[ck]
+					counter[ck] = cnt + 1
+
+					ik := [2]int{cnt + 1, x}
+					var bitsVal uint64
+					if rowMask&bitMasks[b] != 0 {
+						bitsVal = bitMasks[b]
+					}
+					parts = append(parts, partial{ik, key, bitsVal})
+				}
+			}
+		}
+
+		// Zero‑count entries
+		for k, tot := range counter {
+			ik := [2]int{0, k.x}
+			boolVal := uint64(tot-1) & bitMasks[k.b]
+			parts = append(parts, partial{ik, k.s, boolVal})
+		}
+
+		// Shard parts for parallel collection
+		nWorkers := runtime.GOMAXPROCS(0)
+		shardSize := (len(parts) + nWorkers - 1) / nWorkers
+		workerCols := make([]map[[2]int]map[string]uint64, nWorkers)
+		for i := range workerCols {
+			workerCols[i] = make(map[[2]int]map[string]uint64)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(nWorkers)
+		for w := 0; w < nWorkers; w++ {
+			go func(w int) {
+				defer wg.Done()
+				start := w * shardSize
+				if start >= len(parts) {
+					return // nothing to do
+				}
+				end := start + shardSize
+				if end > len(parts) {
+					end = len(parts)
+				}
+				cols := workerCols[w]
+				for _, p := range parts[start:end] {
+					m := cols[p.ikey]
+					if m == nil {
+						m = make(map[string]uint64)
+						cols[p.ikey] = m
+					}
+					m[p.key] |= p.bits
+				}
+			}(w)
+		}
+		wg.Wait()
+
+		// Merge workerCols into global
+		global := make(map[[2]int]map[string]uint64, len(workerCols))
+		for _, cols := range workerCols {
+			for ik, km := range cols {
+				gm := global[ik]
+				if gm == nil {
+					gm = make(map[string]uint64, len(km))
+					global[ik] = gm
+				}
+				for k, v := range km {
+					gm[k] |= v
+				}
+			}
+		}
+
+		// Phase 3: build quaternary filters in parallel
+		type task struct {
+			ikey [2]int
+			val  map[string]uint64
+		}
+		tasks := make(chan task, len(global))
+		results := make(chan struct {
+			ik [2]int
+			fs []byte
+		}, nWorkers)
+
+		go func() {
+			for ik, val := range global {
+				tasks <- task{ik, val}
+			}
+			close(tasks)
+		}()
+
+		wg.Add(nWorkers)
+		for w := 0; w < nWorkers; w++ {
+			go func() {
+				defer wg.Done()
+				for t := range tasks {
+					var fs = quaternary.Make(t.val, byte(loglen))
+					//for k, v := range t.val {
+						//println(&fs[0], t.ikey[0], t.ikey[1], k, v, "(", loglen, ")")
+					//}
+					results <- struct {
+						ik [2]int
+						fs []byte
+					}{t.ikey, fs}
+				}
+			}()
+		}
+
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		for r := range results {
+			ret.index[r.ik] = r.fs
+		}
+
 		return ret
 	}
-
-	// Compute number of bits
-	loglen := bits.Len(uint(len(rows) - 1))
-	ret.loglen = loglen
-
-	// Precompute masks
-	bitMasks := make([]uint64, loglen)
-	for b := 0; b < loglen; b++ {
-		bitMasks[b] = 1 << b
-	}
-
-	// Sequential counter pass + collect all partials
-	type countKey struct {
-		b, x int
-		s    string
-	}
-	counter := make(map[countKey]int, len(rows)*len(rows[0])*loglen)
-	type partial struct {
-		ikey [2]int
-		key  string
-		bits uint64
-	}
-	parts := make([]partial, 0, len(rows)*len(rows[0])*loglen)
-
-	for y, row := range rows {
-		rowMask := uint64(y)
-		for x, key := range row {
-			for b := 0; b < loglen; b++ {
-				ck := countKey{b, x, key}
-				cnt := counter[ck]
-				counter[ck] = cnt + 1
-
-				ik := [2]int{cnt + 1, x}
-				var bitsVal uint64
-				if rowMask&bitMasks[b] != 0 {
-					bitsVal = bitMasks[b]
-				}
-				parts = append(parts, partial{ik, key, bitsVal})
-			}
-		}
-	}
-
-	// Zero‑count entries
-	for k, tot := range counter {
-		ik := [2]int{0, k.x}
-		boolVal := uint64(tot-1) & bitMasks[k.b]
-		parts = append(parts, partial{ik, k.s, boolVal})
-	}
-
-	// Shard parts for parallel collection
-	nWorkers := runtime.GOMAXPROCS(0)
-	shardSize := (len(parts) + nWorkers - 1) / nWorkers
-	workerCols := make([]map[[2]int]map[string]uint64, nWorkers)
-	for i := range workerCols {
-		workerCols[i] = make(map[[2]int]map[string]uint64)
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(nWorkers)
-	for w := 0; w < nWorkers; w++ {
-		go func(w int) {
-			defer wg.Done()
-			start := w * shardSize
-			if start >= len(parts) {
-				return // nothing to do
-			}
-			end := start + shardSize
-			if end > len(parts) {
-				end = len(parts)
-			}
-			cols := workerCols[w]
-			for _, p := range parts[start:end] {
-				m := cols[p.ikey]
-				if m == nil {
-					m = make(map[string]uint64)
-					cols[p.ikey] = m
-				}
-				m[p.key] |= p.bits
-			}
-		}(w)
-	}
-	wg.Wait()
-
-	// Merge workerCols into global
-	global := make(map[[2]int]map[string]uint64, len(workerCols))
-	for _, cols := range workerCols {
-		for ik, km := range cols {
-			gm := global[ik]
-			if gm == nil {
-				gm = make(map[string]uint64, len(km))
-				global[ik] = gm
-			}
-			for k, v := range km {
-				gm[k] |= v
-			}
-		}
-	}
-
-	// Phase 3: build quaternary filters in parallel
-	type task struct {
-		ikey [2]int
-		val  map[string]uint64
-	}
-	tasks := make(chan task, len(global))
-	results := make(chan struct {
-		ik [2]int
-		fs []byte
-	}, nWorkers)
-
-	go func() {
-		for ik, val := range global {
-			tasks <- task{ik, val}
-		}
-		close(tasks)
-	}()
-
-	wg.Add(nWorkers)
-	for w := 0; w < nWorkers; w++ {
-		go func() {
-			defer wg.Done()
-			for t := range tasks {
-				var fs = quaternary.Make(t.val, byte(loglen))
-				//for k, v := range t.val {
-					//println(&fs[0], t.ikey[0], t.ikey[1], k, v, "(", loglen, ")")
-				//}
-				results <- struct {
-					ik [2]int
-					fs []byte
-				}{t.ikey, fs}
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	for r := range results {
-		ret.index[r.ik] = r.fs
-	}
-
-	return ret
-}
 */
 func newBucket(rows [][]string) (ret *bucket) {
 	ret = &bucket{
@@ -255,13 +257,11 @@ func newBucket(rows [][]string) (ret *bucket) {
 	for key, val := range collection {
 		ret.index[key[0]][key[1]] = quaternary.Make(val, byte(ret.loglen))
 		//for k, v := range val {
-			//println(&ret.index[key][0], key[0], key[1], k, v, "(", ret.loglen, ")")
+		//println(&ret.index[key][0], key[0], key[1], k, v, "(", ret.loglen, ")")
 		//}
 	}
 	return
 }
-
-
 
 func (b *bucket) countExisting(col int, val string) (out int) {
 	if !b.presentBucket(col, val) {
